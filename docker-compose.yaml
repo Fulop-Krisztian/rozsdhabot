@@ -1,0 +1,19 @@
+services:
+  rozsdhabot:
+    build: .
+    restart: unless-stopped
+    environment:
+      # separated by commas, case insensitive.
+      # Currently supported: terminal, discord, telegram
+      INTEGRATIONS: terminal,telegram
+
+      # If telegram integration is enabled this is required.
+      TELEGRAM_TOKEN: 8324027311:AAEPualMRLos6yG2SUn2VXVIr9h-reF6oIw
+
+      # If discord integration is enabled this is required.
+      DISCORD_TOKEN:
+
+      DISABLE_SAVING: false # set to true to disable saving to and loading from disk
+      RUST_LOG: info # available levels: trace, debug, info, warn, error. info is recommended.
+    volumes:
+      - ./data:/rozsdhabot/data

@@ -4,3 +4,6 @@ target
 
 # testing 
 index.html*
+
+# The directory where runtime data is stored.
+data

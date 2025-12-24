@@ -1,12 +1,12 @@
+/// This file contains the fetcher for the bot.
+/// The user agent is randomized to work around rate limiting.
+// hardverapro.hu robots.txt reads as follows:
+// User-agent: *
+//
+// crawl-delay: 1
 use reqwest::Client;
-/**
-* @file fetcher.rs
-* @brief Fetches listings from Hardverapro. Uses a random user agent for requests
-* @author Fülöp Krisztián Szilárd
-* @date 2025-12-02
-*/
-use std::time::Duration;
 
+#[derive(Debug)]
 pub struct Fetcher {
     client: reqwest::Client,
 }
@@ -14,8 +14,10 @@ pub struct Fetcher {
 impl Fetcher {
     /// Instead of throwing out new requests left and right.
     pub fn new() -> Self {
+        const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
         let client = Client::builder()
-            .timeout(Duration::from_secs(15))
+            .timeout(TIMEOUT)
             // Fake use agent to stay under the rader.
             // The agent differs beteween rozsdhabot restarts.
             .user_agent(fake_user_agent::get_rua())
