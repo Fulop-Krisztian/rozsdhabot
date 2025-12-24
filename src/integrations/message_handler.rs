@@ -165,7 +165,21 @@ impl IncomingMessageHandler {
             // "/seturl" => {}
             // "/setinterval" => {}
             //
-            "/help" => Ok(Some(include_str!("../../help.txt").to_string())),
+            "/help" => Ok(Some(
+                "
+/help                   | Show this help message.
+/add URL                | Add a new subscription. The URL is not checked for validity.
+/del ID                 | Delete a subscription.
+/list                   | List all subscriptions for the current channel.
+/info ID                | Show metrics for a subscription.
+
+variables:
+ID: The subscription ID. You can get this by using /list.
+URL: The URL to scrape. Only hardverapro is supported currently.
+"
+                .to_string(),
+            )),
+
             _ => Ok(None),
         }
     }

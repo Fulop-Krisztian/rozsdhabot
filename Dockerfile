@@ -1,7 +1,11 @@
 FROM rust:latest AS build
 WORKDIR /src
 
-COPY . .
+COPY ./src ./src
+COPY ./Cargo.toml ./Cargo.toml
+COPY ./Cargo.lock ./Cargo.lock
+# include_str!, so this is needed
+COPY ./help.txt ./help.txt
 RUN cargo build --release
 
 

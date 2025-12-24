@@ -25,13 +25,12 @@ pub fn get_config() -> Result<Config, String> {
     for integration in get_env_var("INTEGRATIONS")
         .expect("INTEGRATIONS not found in env")
         .clone()
-        .to_uppercase()
         .split(',')
         .filter(|s| !s.is_empty())
     // filter dangling commas at the end of config
     // (eg. INTEGRATIONS=terminal,discord,)
     {
-        match integration {
+        match integration.to_uppercase().as_str() {
             "TELEGRAM" => {
                 let token =
                     get_env_var("TELEGRAM_TOKEN").map_err(|_| "TELEGRAM_TOKEN not found in env")?;
@@ -48,7 +47,7 @@ pub fn get_config() -> Result<Config, String> {
             "TERMINAL" => {
                 integrations.insert(Integration::Terminal);
             }
-            _ => println!("Invalid integration: {}. Ignoring", integration),
+            _ => tracing::warn!("Invalid integration: {}. Ignoring", integration),
         }
     }
 
