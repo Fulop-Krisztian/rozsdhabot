@@ -1,5 +1,6 @@
 [package]
 name = "rozsdhabot"
+description = "A bot that scrapes listings from HardverApró and notifies you via an integration."
 version = "0.1.0"
 edition = "2024"
 
