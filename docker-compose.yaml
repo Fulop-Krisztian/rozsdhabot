@@ -8,6 +8,7 @@ services:
       INTEGRATIONS: terminal,telegram
 
       # If telegram integration is enabled this is required.
+      # this token is just an example, you need to get your own.
       TELEGRAM_TOKEN: 8324027311:AAEPualMRLos6yG2SUn2VXVIr9h-reF6oIw
 
       # If discord integration is enabled this is required.
