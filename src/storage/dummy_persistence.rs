@@ -11,7 +11,7 @@ impl Persistence for DummyPersistence {
         Ok(Vec::new())
     }
 
-    fn save_subscriptions(&self, subs: &[Subscription]) -> anyhow::Result<()> {
+    fn save_subscriptions(&self, _subs: &[Subscription]) -> anyhow::Result<()> {
         // println!("Saved subscriptions: {subs:?}");
         Ok(())
     }
@@ -21,7 +21,7 @@ impl Persistence for DummyPersistence {
         Ok(Vec::new())
     }
 
-    fn save_states(&self, states: &[SubscriptionState]) -> anyhow::Result<()> {
+    fn save_states(&self, _states: &[SubscriptionState]) -> anyhow::Result<()> {
         // println!("Saved states: {states:?}");
         Ok(())
     }

@@ -18,16 +18,15 @@ pub struct Monitor {
     notifiers: NotifierRegistry,
 }
 
+#[derive(Default)]
 pub struct MonitorManager {
     monitors: HashMap<u64, MonitorHandle>,
 }
 
 /// A monitor manager that is reponsible for spawning and keeping track of monitors.
 impl MonitorManager {
-    pub fn new() -> Self {
-        Self {
-            monitors: HashMap::new(),
-        }
+    pub fn new(monitors: HashMap<u64, MonitorHandle>) -> Self {
+        Self { monitors }
     }
 
     pub fn start_monitor(
@@ -36,7 +35,8 @@ impl MonitorManager {
         runtime_store: Arc<Mutex<RuntimeStateStore>>,
         notifiers: NotifierRegistry,
     ) {
-        let span = tracing::info_span!("monitor", subscription = subscription.id);
+        // We always want to see which monitor this is.
+        let span = tracing::error_span!("monitor", subscription = subscription.id);
 
         let (shutdown_tx, shutdown_rx) = watch::channel(());
 
@@ -66,7 +66,7 @@ impl MonitorManager {
     }
 
     /// In the current implementation subscriptions are restarted when modified.
-    pub async fn restart_monitor(
+    pub fn restart_monitor(
         &mut self,
         subscription: Subscription,
         runtime_store: Arc<Mutex<RuntimeStateStore>>,
@@ -100,16 +100,16 @@ impl Monitor {
 
     pub async fn run(&mut self, mut shutdown: watch::Receiver<()>) {
         tracing::info!("Starting monitor");
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+            self.subscription.config.interval,
+        ));
+
         loop {
             tokio::select! {
                 _ = shutdown.changed() => {tracing::info!("Monitor stopping"); break},
-                _ = self.scrape() => {}
+                // errors are ignored here.
+                _ = interval.tick() => self.scrape().await.unwrap_or(()),
             }
-
-            tokio::time::sleep(std::time::Duration::from_secs(
-                self.subscription.config.interval,
-            ))
-            .await;
         }
     }
 
@@ -128,6 +128,9 @@ impl Monitor {
             }
         };
 
+        // Where the parser is run.
+        // Future expansion: We could run a parser based on the type of subscription (implementing
+        // multiple parsers).
         let page = parse_hardverapro(&body);
 
         // logging the results

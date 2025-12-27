@@ -83,17 +83,45 @@ impl SubscriptionStore {
         self.subscriptions.insert(subscription.id, subscription);
         self.next_id += 1;
 
-        self.persistence
-            .save_subscriptions(&self.subscriptions.values().cloned().collect::<Vec<_>>());
+        match self
+            .persistence
+            .save_subscriptions(&self.subscriptions.values().cloned().collect::<Vec<_>>())
+        {
+            Ok(_) => self.next_id - 1,
+            Err(e) => {
+                tracing::error!("Failed to save subscriptions when adding: {e}");
+                self.next_id - 1
+            }
+        };
 
         self.next_id - 1
     }
 
     pub fn remove_subscription(&mut self, id: u64) -> bool {
         let removed = self.subscriptions.remove(&id).is_some();
-        self.persistence
-            .save_subscriptions(&self.subscriptions.values().cloned().collect::<Vec<_>>());
+        match self
+            .persistence
+            .save_subscriptions(&self.subscriptions.values().cloned().collect::<Vec<_>>())
+        {
+            Ok(_) => removed,
+            Err(e) => {
+                tracing::error!("Failed to save subscriptions when removing: {e}");
+                removed
+            }
+        };
         removed
+    }
+
+    pub fn update_subscription(&mut self, id: u64, subscription: Subscription) {
+        match self
+            .persistence
+            .save_subscriptions(&self.subscriptions.values().cloned().collect::<Vec<_>>())
+        {
+            Ok(_) => (),
+            Err(e) => {
+                tracing::error!("Failed to save subscriptions when adding: {e}");
+            }
+        }
     }
 
     pub fn get_subscription(&self, id: u64) -> Option<&Subscription> {

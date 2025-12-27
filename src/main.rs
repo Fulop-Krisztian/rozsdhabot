@@ -35,14 +35,13 @@ mod storage;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     const DATA_DIR: &str = "data";
+    // set up logging
+    init_tracing();
 
     match std::fs::File::open("coconut.jpg") {
         Ok(_) => (),
         Err(_) => panic!("Nincs kokusz, nincs program."),
     }
-
-    // set up logging
-    init_tracing();
 
     // Load the environment variables
     // this can crash if config is invalid
@@ -57,15 +56,20 @@ async fn main() -> anyhow::Result<()> {
         );
         Arc::new(DummyPersistence)
     } else {
-        Arc::new(FilePersistence::new(DATA_DIR).unwrap())
+        Arc::new(
+            FilePersistence::new(DATA_DIR).expect("Failed to to initalize file based persistence"),
+        )
     };
 
-    let substore = Arc::new(Mutex::new(SubscriptionStore::new(saver.clone())));
-    let runtime_state = Arc::new(Mutex::new(RuntimeStateStore::new(saver.clone()).unwrap()));
-    let monitor_manager = Arc::new(Mutex::new(MonitorManager::new()));
+    fn arc_mutex<T>(t: T) -> Arc<Mutex<T>> {
+        Arc::new(Mutex::new(t))
+    }
+
+    let substore = arc_mutex(SubscriptionStore::new(Arc::clone(&saver)));
+    let runtime_state = arc_mutex(RuntimeStateStore::new(Arc::clone(&saver)).unwrap());
+    let monitor_manager = arc_mutex(MonitorManager::default());
 
     run_app(config, substore, runtime_state, monitor_manager).await;
-
     Ok(())
 }
 
@@ -111,6 +115,23 @@ async fn run_app(
         "Starting all saved subscriptions with {}ms stagger. This may take a while...",
         STAGGER.as_millis()
     );
+
+    if let Some(telegram_bot) = telegram_bot {
+        handles.push(tokio::spawn(run_telegram_dispatcher(
+            telegram_bot,
+            subscription_store.clone(),
+            state_store.clone(),
+            monitor_manager.clone(),
+            notifiers.clone(),
+        )));
+    }
+
+    // Persistently holding the mutex guard is fine as long as the handlers are launched
+    // beforehand.
+    //
+    // This also prevents inconsistent state from the user sending a /del command before the given
+    // monitor has started, since the mutex is held for the duration of startup, and nothing can be
+    // modified.
     for sub in subscription_store
         .lock()
         .unwrap()
@@ -125,16 +146,6 @@ async fn run_app(
         // Staggared startup to avoid rate limiting
         // The mutex is held for the duration of startup.
         sleep(STAGGER).await;
-    }
-
-    if let Some(telegram_bot) = telegram_bot {
-        handles.push(tokio::spawn(run_telegram_dispatcher(
-            telegram_bot,
-            subscription_store.clone(),
-            state_store.clone(),
-            monitor_manager.clone(),
-            notifiers,
-        )));
     }
 
     // SIGINT I think.
