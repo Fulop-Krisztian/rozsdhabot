@@ -8,15 +8,15 @@ use crate::{
 
 /// A notifier that prints the listing to the terminal. Intended for testing, but it's
 /// fully functional.
-pub struct TerminalAdapter;
-impl TerminalAdapter {
+pub struct TerminalIntegration;
+impl TerminalIntegration {
     pub fn new() -> Self {
         Self {}
     }
 }
 
 #[async_trait]
-impl Notifier for TerminalAdapter {
+impl Notifier for TerminalIntegration {
     async fn notify_new_listing(
         &self,
         subscription: &Subscription,

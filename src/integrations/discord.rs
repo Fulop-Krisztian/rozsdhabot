@@ -1,14 +1,15 @@
 use crate::{
-    integrations::Notifier,
+    AppCtx,
+    integrations::{Controller, Notifier},
     models::{ChannelId, Listing, Subscription},
     parsers::ScrapeMetadata,
 };
 
-pub struct DiscordAdapter {
+pub struct DiscordIntegration {
     token: String,
 }
 
-impl DiscordAdapter {
+impl DiscordIntegration {
     pub fn new(token: &str) -> Self {
         Self {
             token: token.to_string(),
@@ -18,7 +19,7 @@ impl DiscordAdapter {
 
 use async_trait::async_trait;
 #[async_trait]
-impl Notifier for DiscordAdapter {
+impl Notifier for DiscordIntegration {
     async fn notify_new_listing(
         &self,
         subscription: &Subscription,
@@ -39,6 +40,13 @@ impl Notifier for DiscordAdapter {
         todo!()
     }
     async fn send_coconut(&self, channel_id: ChannelId) -> Result<(), String> {
+        todo!()
+    }
+}
+
+#[async_trait]
+impl Controller for DiscordIntegration {
+    async fn start(&self, context: AppCtx) -> () {
         todo!()
     }
 }

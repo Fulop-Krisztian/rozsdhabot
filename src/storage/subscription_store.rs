@@ -112,17 +112,7 @@ impl SubscriptionStore {
         removed
     }
 
-    pub fn update_subscription(&mut self, id: u64, subscription: Subscription) {
-        match self
-            .persistence
-            .save_subscriptions(&self.subscriptions.values().cloned().collect::<Vec<_>>())
-        {
-            Ok(_) => (),
-            Err(e) => {
-                tracing::error!("Failed to save subscriptions when adding: {e}");
-            }
-        }
-    }
+    // pub fn update_subscription(&mut self, id: u64, subscription: Subscription) {}
 
     pub fn get_subscription(&self, id: u64) -> Option<&Subscription> {
         self.subscriptions.get(&id)
@@ -151,12 +141,12 @@ mod tests {
         let mut store = SubscriptionStore::new(Arc::new(DummyPersistence {}));
         // We can susccessfully add
         store.add_subscription(
-            "https://hardverapro.hu".to_string(),
+            "https://hardverapro.hu/index.php?stext=test".to_string(),
             ChannelId::Telegram {
                 chat_id: teloxide::types::ChatId(1),
             },
             OwnerId::Telegram {
-                user_id: Some(teloxide::types::UserId(1)),
+                user_id: Some(teloxide::types::UserId(2)),
             },
         );
 
@@ -167,9 +157,9 @@ mod tests {
                 chat_id: teloxide::types::ChatId(1),
             }],
             owner: OwnerId::Telegram {
-                user_id: Some(teloxide::types::UserId(1)),
+                user_id: Some(teloxide::types::UserId(2)),
             },
-            url: "https://hardverapro.hu".to_string(),
+            url: "https://hardverapro.hu/index.php?stext=test".to_string(),
             config: SubscriptionConfig::default(),
             // platform_config: ChannelConfig::Telegram { thread_id: None },
             // metrics: SubscriptionMetrics::new(),

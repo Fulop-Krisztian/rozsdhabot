@@ -1,29 +1,27 @@
-use std::sync::{Arc, Mutex};
-
 use crate::{
+    AppCtx,
     integrations::{
-        Notifier, NotifierRegistry,
-        message_handler::{IncomingMessage, IncomingMessageHandler},
+        Controller, Notifier,
+        message_handler::{IncomingMessage, handle_message},
     },
     models::{ChannelId, Listing, Subscription},
-    monitor::MonitorManager,
     parsers::ScrapeMetadata,
-    storage::{RuntimeStateStore, SubscriptionStore},
 };
 
 use async_trait::async_trait;
 use teloxide::{
     Bot,
+    dispatching::UpdateFilterExt,
     payloads::SendMessageSetters,
-    prelude::{Requester, ResponseResult},
-    types::{InputFile, Message},
+    prelude::{Dispatcher, Requester, ResponseResult},
+    types::{InputFile, Message, Update},
 };
 
-pub struct TelegramAdapter {
+pub struct TelegramIntegration {
     pub bot: teloxide::Bot,
 }
 
-impl TelegramAdapter {
+impl TelegramIntegration {
     pub fn new(bot: teloxide::Bot) -> Self {
         Self { bot }
     }
@@ -76,7 +74,7 @@ From subscription:
 }
 
 #[async_trait]
-impl Notifier for TelegramAdapter {
+impl Notifier for TelegramIntegration {
     async fn notify_new_listing(
         &self,
         subscription: &Subscription,
@@ -121,23 +119,28 @@ impl Notifier for TelegramAdapter {
     }
 }
 
+#[async_trait]
+impl Controller for TelegramIntegration {
+    /// Modifies the AppCtx by adding itself as a controller.
+    async fn start(&self, context: AppCtx) -> () {
+        let handler = Update::filter_message().endpoint(move |bot: Bot, msg: Message| {
+            let context = context.clone();
+            async { telegram_handler(bot, msg, context).await }
+        });
+        Dispatcher::builder(self.bot.clone(), handler)
+            .enable_ctrlc_handler()
+            .build()
+            .dispatch()
+            .await;
+    }
+}
+
 // For the dispatcher.
-pub async fn telegram_handler(
-    bot: Bot,
-    msg: Message,
-    subscription_store: Arc<Mutex<SubscriptionStore>>,
-    runtime_store: Arc<Mutex<RuntimeStateStore>>,
-    monitor_manager: Arc<Mutex<MonitorManager>>,
-    notifiers: NotifierRegistry,
-) -> ResponseResult<()> {
-    let handler = IncomingMessageHandler {
-        subscriptions: subscription_store,
-        monitor_manager,
-    };
+pub async fn telegram_handler(bot: Bot, msg: Message, context: AppCtx) -> ResponseResult<()> {
     let channel_id = msg.chat.id;
     let message = IncomingMessage::from_telegram(msg);
 
-    let reply = handler.handle_message(message, runtime_store, notifiers);
+    let reply = handle_message(message, context);
 
     // We differentiate between errors and normal replies, but they are currently both handled
     // the same way.

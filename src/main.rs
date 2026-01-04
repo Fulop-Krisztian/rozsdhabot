@@ -4,18 +4,12 @@ use std::{
 };
 
 use crate::{
-    config::{Config, Integration, get_config},
-    integrations::{NotifierRegistry, TelegramAdapter, TerminalAdapter},
+    config::AppConfig,
+    integrations::NotifierRegistry,
     monitor::MonitorManager,
     storage::{
         DummyPersistence, FilePersistence, Persistence, RuntimeStateStore, SubscriptionStore,
     },
-};
-use teloxide::{
-    Bot,
-    dispatching::UpdateFilterExt,
-    prelude::Dispatcher,
-    types::{Message, Update},
 };
 use tokio::time::sleep;
 use tracing_subscriber::{EnvFilter, fmt};
@@ -34,7 +28,6 @@ mod storage;
 // https://www.youtube.com/watch?v=SmM0653YvXU
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    const DATA_DIR: &str = "data";
     // set up logging
     init_tracing();
 
@@ -45,11 +38,11 @@ async fn main() -> anyhow::Result<()> {
 
     // Load the environment variables
     // this can crash if config is invalid
-    let config = get_config().expect("Unable to load configuration");
-    if config.integrations.is_empty() {
-        panic!("No integrations found. Please add them to the .env file.");
-    }
+    let config = AppConfig::get_config().expect("Unable to load configuration");
+    let (controllers, notifiers) = AppConfig::get_integrations(&config);
 
+    const DATA_DIR: &str = "data";
+    // Deciding what kind of persistence to use.
     let saver: Arc<dyn Persistence> = if config.disable_saving {
         tracing::warn!(
             "Nothing is saved to or loaded from disk. Disable in .env file if this is not intended."
@@ -61,16 +54,81 @@ async fn main() -> anyhow::Result<()> {
         )
     };
 
-    fn arc_mutex<T>(t: T) -> Arc<Mutex<T>> {
-        Arc::new(Mutex::new(t))
+    let app_context = AppCtx {
+        notifiers,
+        ..AppCtx::with_persistence(saver)
+    };
+
+    // Each controller is launched in a separate task on startup.
+    // let controllers: Vec<Arc<dyn Controller>>;
+    //
+    run_app(app_context, controllers).await;
+    Ok(())
+}
+
+#[derive(Clone)]
+/// Short for app context.
+///
+/// Stores the things needed to run the entire application.
+pub struct AppCtx {
+    /// Stores subscriptions, based upon which the monitors are started. Modified by the
+    /// controllers.
+    pub subscription_store: Arc<Mutex<SubscriptionStore>>,
+    /// Stores the runtime state of monitors. This is modified by the monitors themselves.
+    pub runtime_store: Arc<Mutex<RuntimeStateStore>>,
+    /// Manages the monitors, state is modified by the controllers.
+    pub monitor_manager: Arc<Mutex<MonitorManager>>,
+    /// Passed along to each monitor for them to use. Immutable after startup.
+    pub notifiers: NotifierRegistry,
+}
+
+use integrations::Controller;
+
+impl AppCtx {
+    /// Create a new context by fully specifying all fields.
+    fn new(
+        subscription_store: Arc<Mutex<SubscriptionStore>>,
+        runtime_store: Arc<Mutex<RuntimeStateStore>>,
+        monitor_manager: Arc<Mutex<MonitorManager>>,
+        notifiers: NotifierRegistry,
+    ) -> Self {
+        Self {
+            subscription_store,
+            runtime_store,
+            monitor_manager,
+            notifiers,
+        }
     }
 
-    let substore = arc_mutex(SubscriptionStore::new(Arc::clone(&saver)));
-    let runtime_state = arc_mutex(RuntimeStateStore::new(Arc::clone(&saver)).unwrap());
-    let monitor_manager = arc_mutex(MonitorManager::default());
+    /// Create a new context with the given persistence.
+    ///
+    /// Other fields are set to default.
+    fn with_persistence(persistence: Arc<dyn Persistence>) -> Self {
+        Self::new(
+            Arc::new(Mutex::new(SubscriptionStore::new(persistence.clone()))),
+            Arc::new(Mutex::new(
+                RuntimeStateStore::new(persistence.clone()).unwrap(),
+            )),
+            Arc::new(Mutex::new(MonitorManager::default())),
+            NotifierRegistry::default(),
+        )
+    }
+}
 
-    run_app(config, substore, runtime_state, monitor_manager).await;
-    Ok(())
+impl Default for AppCtx {
+    /// Dummy persistence is used as default.
+    fn default() -> Self {
+        Self::new(
+            Arc::new(Mutex::new(SubscriptionStore::new(Arc::new(
+                DummyPersistence {},
+            )))),
+            Arc::new(Mutex::new(
+                RuntimeStateStore::new(Arc::new(DummyPersistence {})).unwrap(),
+            )),
+            Arc::new(Mutex::new(MonitorManager::default())),
+            NotifierRegistry::default(),
+        )
+    }
 }
 
 fn init_tracing() {
@@ -79,35 +137,8 @@ fn init_tracing() {
     tracing::info!("🦀🦀🦀 Logging initialized, welcome to rozsdhabot! 🦀🦀🦀");
 }
 
-async fn run_app(
-    config: Config,
-    subscription_store: Arc<Mutex<SubscriptionStore>>,
-    state_store: Arc<Mutex<RuntimeStateStore>>,
-    monitor_manager: Arc<Mutex<MonitorManager>>,
-) {
-    let mut handles = Vec::new();
-    let mut notifiers = NotifierRegistry::default();
-
-    let mut telegram_bot: Option<Bot> = None;
-
-    // The set ensures that there is only one instance of each integration.
-    for integration in &config.integrations {
-        match integration {
-            Integration::Telegram { token } => {
-                telegram_bot = Some(Bot::new(token));
-                // The unwrap here is safe because we just initalized the bot.
-                notifiers.telegram = Some(Arc::new(TelegramAdapter::new(
-                    telegram_bot.clone().unwrap(),
-                )));
-            }
-
-            Integration::Discord { token } => {
-                notifiers.discord = None;
-                // same pattern
-            }
-            Integration::Terminal => notifiers.terminal = Some(Arc::new(TerminalAdapter::new())),
-        }
-    }
+async fn run_app(context: AppCtx, controllers: Vec<Arc<dyn Controller>>) {
+    // let mut handles = Vec::new();
 
     // Start monitors that were loaded from disk.
     const STAGGER: Duration = Duration::from_millis(1250);
@@ -116,14 +147,11 @@ async fn run_app(
         STAGGER.as_millis()
     );
 
-    if let Some(telegram_bot) = telegram_bot {
-        handles.push(tokio::spawn(run_telegram_dispatcher(
-            telegram_bot,
-            subscription_store.clone(),
-            state_store.clone(),
-            monitor_manager.clone(),
-            notifiers.clone(),
-        )));
+    for controller in controllers {
+        let context = context.clone();
+        tokio::spawn(async move {
+            controller.start(context).await;
+        });
     }
 
     // Persistently holding the mutex guard is fine as long as the handlers are launched
@@ -132,17 +160,19 @@ async fn run_app(
     // This also prevents inconsistent state from the user sending a /del command before the given
     // monitor has started, since the mutex is held for the duration of startup, and nothing can be
     // modified.
-    for sub in subscription_store
+    for sub in context
+        .subscription_store
         .lock()
         .unwrap()
         .subscriptions
         .values()
         .cloned()
     {
-        monitor_manager
-            .lock()
-            .unwrap()
-            .start_monitor(sub, state_store.clone(), notifiers.clone());
+        context.monitor_manager.lock().unwrap().start_monitor(
+            sub,
+            context.runtime_store.clone(),
+            context.notifiers.clone(),
+        );
         // Staggared startup to avoid rate limiting
         // The mutex is held for the duration of startup.
         sleep(STAGGER).await;
@@ -150,37 +180,4 @@ async fn run_app(
 
     // SIGINT I think.
     tokio::signal::ctrl_c().await;
-}
-
-pub async fn run_telegram_dispatcher(
-    bot: Bot,
-    subscription_store: Arc<Mutex<SubscriptionStore>>,
-    runtime_store: Arc<Mutex<RuntimeStateStore>>,
-    monitor_manager: Arc<Mutex<MonitorManager>>,
-    notifiers: NotifierRegistry,
-) {
-    use integrations::telegram_handler;
-    let handler = Update::filter_message().endpoint(move |bot: Bot, msg: Message| {
-        let subscription_store = subscription_store.clone();
-        let runtime_store = runtime_store.clone();
-        let monitor_manager = monitor_manager.clone();
-        let notifiers = notifiers.clone();
-        async move {
-            telegram_handler(
-                bot,
-                msg,
-                subscription_store,
-                runtime_store,
-                monitor_manager,
-                notifiers,
-            )
-            .await
-        }
-    });
-
-    Dispatcher::builder(bot, handler)
-        .enable_ctrlc_handler()
-        .build()
-        .dispatch()
-        .await;
 }
