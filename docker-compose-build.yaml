@@ -2,7 +2,7 @@
 
 services:
   rozsdhabot:
-    image: krissssz/rozsdhabot:latest
+    build: .
     restart: unless-stopped
     environment:
       # separated by commas, case insensitive.
