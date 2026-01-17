@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.4
-# docker buildx build --platform linux/amd64,linux/arm64 -t krissssz/rozsdhabot --push .
+# to build for multiple platforms and the push to docker hub:
+# docker buildx build --platform linux/amd64,linux/arm64 -t krissssz/rozsdhabot:latest --push .
 
 # === BUILD STAGE
 FROM rust:latest AS build
