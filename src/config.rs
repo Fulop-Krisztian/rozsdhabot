@@ -1,4 +1,6 @@
-use crate::integrations::{Controller, NotifierRegistry, TelegramIntegration, TerminalIntegration};
+use crate::integrations::{
+    Controller, DiscordIntegration, NotifierRegistry, TelegramIntegration, TerminalIntegration,
+};
 use std::{collections::HashSet, sync::Arc};
 use teloxide::Bot;
 
@@ -14,9 +16,16 @@ pub enum Integration {
     Terminal,
 }
 
+pub enum ConfigLoadMethod {
+    File,
+    Env,
+}
+
 impl AppConfig {
     pub fn get_config() -> Result<AppConfig, String> {
-        // dotenv::from_filename(".env").map_err(|_| "Couldn't find .env file")?;
+        // this is for testing only.
+        let _ = dotenv::from_filename(".env");
+
         let mut integrations = HashSet::new();
 
         for integration in get_env_var("INTEGRATIONS")
@@ -44,10 +53,14 @@ impl AppConfig {
                 "TERMINAL" => {
                     integrations.insert(Integration::Terminal);
                 }
-                _ => tracing::error!(
-                    "Invalid integration: {}. Check the INTEGRATIONS variable",
-                    integration
-                ),
+                _ => {
+                    tracing::error!(
+                        "Invalid integration: '{}'. Check the INTEGRATIONS variable",
+                        integration
+                    );
+                    // It's better if we exit here rather than continue.
+                    std::process::exit(1);
+                }
             }
         }
 
@@ -83,6 +96,8 @@ impl AppConfig {
 
                 Integration::Discord { token } => {
                     // same pattern
+                    let discord_bot = DiscordIntegration::new(token);
+                    // TODO:
                     notifiers.discord = None;
                 }
                 Integration::Terminal => {

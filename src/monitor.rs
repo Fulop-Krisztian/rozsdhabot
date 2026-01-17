@@ -177,6 +177,8 @@ impl Monitor {
                         .update_last_seen(self.subscription.id, id)
                         .unwrap();
                 }
+                // TODO: This is incorrect logic for what I want to do. This doesn't notify until
+                // it has seen a new listing. I only want it to skip notifying on the first run.
                 tracing::info!("no listing seen before: notifications will not be sent");
                 return Ok(());
             }

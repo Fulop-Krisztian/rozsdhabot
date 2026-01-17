@@ -112,6 +112,19 @@ impl SubscriptionStore {
         removed
     }
 
+    /// Same as remove_subscription(), but checks if the subscription we want to remove actually
+    /// belongs to the channel in question
+    pub fn remove_subscription_channel(&mut self, id: u64, channel: ChannelId) -> bool {
+        if let Some(sub) = self.subscriptions.get(&id)
+            && sub.channels.contains(&channel)
+        {
+            // Use the return value from remove subscription
+            return self.remove_subscription(id);
+        }
+        // Or just return false, since the subscription doesn't exist.
+        false
+    }
+
     // pub fn update_subscription(&mut self, id: u64, subscription: Subscription) {}
 
     pub fn get_subscription(&self, id: u64) -> Option<&Subscription> {
