@@ -36,7 +36,7 @@ impl MonitorManager {
         notifiers: NotifierRegistry,
     ) {
         // We always want to see which monitor this is.
-        let span = tracing::error_span!("monitor", subscription = subscription.id);
+        let span = tracing::error_span!("monitor", sub = subscription.id);
 
         let (shutdown_tx, shutdown_rx) = watch::channel(());
 

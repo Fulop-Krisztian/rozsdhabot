@@ -26,6 +26,8 @@ mod storage;
 // TODO: kód összetartó kókusz
 // TODO: a kókuszt ÉJÁJJÁL ellenőrzi
 // https://www.youtube.com/watch?v=SmM0653YvXU
+
+type Controllers = Vec<Box<dyn Controller>>;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // set up logging
@@ -39,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
     // Load the environment variables
     // this can crash if config is invalid
     let config = AppConfig::get_config().expect("Unable to load configuration");
-    let (controllers, notifiers) = AppConfig::get_integrations(&config);
+    let (controllers, notifiers) = AppConfig::get_integrations(&config).await;
 
     const DATA_DIR: &str = "data";
     // Deciding what kind of persistence to use.
@@ -61,7 +63,6 @@ async fn main() -> anyhow::Result<()> {
 
     // Each controller is launched in a separate task on startup.
     // let controllers: Vec<Arc<dyn Controller>>;
-    //
     run_app(app_context, controllers).await;
     Ok(())
 }
@@ -137,7 +138,7 @@ fn init_tracing() {
     tracing::info!("🦀🦀🦀 Logging initialized, welcome to rozsdhabot! 🦀🦀🦀");
 }
 
-async fn run_app(context: AppCtx, controllers: Vec<Arc<dyn Controller>>) {
+async fn run_app(context: AppCtx, controllers: Controllers) {
     // let mut handles = Vec::new();
 
     // Start monitors that were loaded from disk.
@@ -146,13 +147,6 @@ async fn run_app(context: AppCtx, controllers: Vec<Arc<dyn Controller>>) {
         "Starting all saved subscriptions with {}ms stagger. This may take a while...",
         STAGGER.as_millis()
     );
-
-    for controller in controllers {
-        let context = context.clone();
-        tokio::spawn(async move {
-            controller.start(context).await;
-        });
-    }
 
     // Persistently holding the mutex guard is fine as long as the handlers are launched
     // beforehand.
@@ -176,6 +170,14 @@ async fn run_app(context: AppCtx, controllers: Vec<Arc<dyn Controller>>) {
         // Staggared startup to avoid rate limiting
         // The mutex is held for the duration of startup.
         sleep(STAGGER).await;
+    }
+
+    // Don't move this before the monitor launch because of a deadlock with the discord controller.
+    for controller in controllers {
+        let context = context.clone();
+        tokio::spawn(async move {
+            controller.start(context).await;
+        });
     }
 
     // SIGINT I think.

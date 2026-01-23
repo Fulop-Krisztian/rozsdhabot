@@ -17,6 +17,7 @@ use teloxide::{
     types::{InputFile, Message, Update},
 };
 
+#[derive(Clone)]
 pub struct TelegramIntegration {
     pub bot: teloxide::Bot,
 }
@@ -84,7 +85,13 @@ impl Notifier for TelegramIntegration {
     ) -> Result<(), String> {
         let chat_id = match channel_id {
             ChannelId::Telegram { chat_id } => chat_id,
-            _ => return Err("Invalid channel ID: expected Telegram channel.".to_string()),
+            _ => {
+                return Err(format!(
+                    "Invalid channel ID: {:?} expected Telegram channel.",
+                    channel_id
+                )
+                .to_string());
+            }
         };
 
         match self
@@ -122,7 +129,7 @@ impl Notifier for TelegramIntegration {
 #[async_trait]
 impl Controller for TelegramIntegration {
     /// Modifies the AppCtx by adding itself as a controller.
-    async fn start(&self, context: AppCtx) -> () {
+    async fn start(self: Box<Self>, context: AppCtx) -> () {
         let handler = Update::filter_message().endpoint(move |bot: Bot, msg: Message| {
             let context = context.clone();
             async { telegram_handler(bot, msg, context).await }

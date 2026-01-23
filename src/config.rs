@@ -1,5 +1,9 @@
-use crate::integrations::{
-    Controller, DiscordIntegration, NotifierRegistry, TelegramIntegration, TerminalIntegration,
+use crate::{
+    Controllers,
+    integrations::{
+        DiscordController, DiscordNotifier, NotifierRegistry, TelegramIntegration,
+        TerminalIntegration,
+    },
 };
 use std::{collections::HashSet, sync::Arc};
 use teloxide::Bot;
@@ -14,11 +18,6 @@ pub enum Integration {
     Telegram { token: String },
     Discord { token: String },
     Terminal,
-}
-
-pub enum ConfigLoadMethod {
-    File,
-    Env,
 }
 
 impl AppConfig {
@@ -75,30 +74,29 @@ impl AppConfig {
         })
     }
 
-    pub fn get_integrations(config: &AppConfig) -> (Vec<Arc<dyn Controller>>, NotifierRegistry) {
+    pub async fn get_integrations(config: &AppConfig) -> (Controllers, NotifierRegistry) {
         // This is just so that we don't run without any integrations.
         if config.integrations.is_empty() {
             panic!("No integrations found. Please add them to the .env file.");
         }
 
         let mut notifiers = NotifierRegistry::default();
-        let mut controllers: Vec<Arc<dyn Controller>> = Vec::new();
+        let mut controllers: Controllers = Vec::new();
+
         // The set ensures that there is only one instance of each integration.
         for integration in &config.integrations {
             match integration {
                 Integration::Telegram { token } => {
-                    let telegram_bot = Bot::new(token);
-                    let integration = Arc::new(TelegramIntegration::new(telegram_bot));
-                    // The unwrap here is safe because we just initalized the bot.
-                    notifiers.telegram = Some(integration.clone());
-                    controllers.push(integration);
+                    let integration = TelegramIntegration::new(Bot::new(token));
+                    notifiers.telegram = Some(Arc::new(integration.clone()));
+                    controllers.push(Box::new(integration));
                 }
 
                 Integration::Discord { token } => {
-                    // same pattern
-                    let discord_bot = DiscordIntegration::new(token);
-                    // TODO:
-                    notifiers.discord = None;
+                    let controller = DiscordController::new(token);
+                    let notifier = DiscordNotifier::new(token);
+                    notifiers.discord = Some(Arc::new(notifier));
+                    controllers.push(Box::new(controller));
                 }
                 Integration::Terminal => {
                     notifiers.terminal = Some(Arc::new(TerminalIntegration::new()))

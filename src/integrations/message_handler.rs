@@ -8,7 +8,7 @@ use crate::{
 pub struct IncomingMessage {
     /// Should go mostly unused. This is the ID of the message. Unique what it represents per
     /// platform.
-    pub message_id: i64,
+    pub message_id: u64,
     /// Use this to identify where to send the reply, or to store the subscription.
     pub channel_id: ChannelId,
     pub sender: OwnerId,
@@ -20,6 +20,7 @@ pub struct IncomingMessage {
 ///
 /// This function modifies the context via interior mutability (through Mutexes).
 pub fn handle_message(message: IncomingMessage, context: AppCtx) -> Result<Option<String>, String> {
+    tracing::trace!("discord: interpreted message: {:?}", message);
     let command = message.content.split_whitespace().next().unwrap_or("");
 
     // Nothing needs to be done if the message is not a command.
@@ -44,14 +45,10 @@ URL: The URL to scrape. Only hardverapro is supported currently.
     // command (e.g. /add url1 url2 url3)
     match command {
         "/start" => Ok(Some(START_MESSAGE.to_string())),
-
         "/add" => add_subscription(message, context),
-
         "/del" => delete_subscription(message, context),
-
         "/list" => list_channel_subs(message, context),
         "/ls" => list_channel_subs(message, context),
-
         "/info" => sub_details(message, context), // set the name of a subscription. This will need an ID and the rest of the string will
         // be the name.
         // "/settings" => {}
@@ -101,7 +98,7 @@ pub fn add_subscription(
         context.runtime_store,
         context.notifiers,
     );
-
+    tracing::info!("New subscription added with ID: {}", id);
     Ok(Some(format!("New subscription added with ID: {}", id)))
 }
 
@@ -231,7 +228,7 @@ pub fn sub_details(message: IncomingMessage, context: AppCtx) -> Result<Option<S
 impl IncomingMessage {
     pub fn from_telegram(message: teloxide::types::Message) -> Self {
         Self {
-            message_id: message.id.0 as i64,
+            message_id: message.id.0 as u64,
             channel_id: ChannelId::Telegram {
                 chat_id: message.chat.id,
             },
@@ -249,8 +246,33 @@ impl IncomingMessage {
         }
     }
 
-    pub fn from_discord_command() {
-        todo!()
+    pub fn from_discord_command(
+        command: serenity::model::application::CommandInteraction,
+        content: String,
+    ) -> Self {
+        Self {
+            message_id: command.id.into(),
+            channel_id: ChannelId::Discord {
+                channel: command.channel_id,
+            },
+            sender: OwnerId::Discord {
+                user_id: command.user.id,
+            },
+            content,
+        }
+    }
+
+    pub fn from_discord_message(msg: serenity::all::Message) -> Self {
+        Self {
+            message_id: msg.id.into(),
+            channel_id: ChannelId::Discord {
+                channel: msg.channel_id,
+            },
+            sender: OwnerId::Discord {
+                user_id: msg.author.id,
+            },
+            content: msg.content,
+        }
     }
 }
 

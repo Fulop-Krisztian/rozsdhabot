@@ -8,9 +8,13 @@ use crate::models::listing::ListingId;
 pub enum ChannelId {
     // This is always just stdout.
     Terminal,
-    Telegram { chat_id: teloxide::types::ChatId },
+    Telegram {
+        chat_id: teloxide::types::ChatId,
+    },
     // GuildId is the group, channel_id is the channel.
-    Discord { guild_id: i64, channel_id: i64 },
+    Discord {
+        channel: serenity::model::id::ChannelId,
+    },
 }
 
 // /// Might be expanded in the future.
@@ -49,7 +53,7 @@ pub enum OwnerId {
         user_id: Option<teloxide::types::UserId>,
     },
     Discord {
-        user_id: i64,
+        user_id: serenity::model::id::UserId,
     },
 }
 

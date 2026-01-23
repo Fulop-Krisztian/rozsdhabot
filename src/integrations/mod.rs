@@ -11,7 +11,8 @@ use crate::{
 };
 
 pub use self::{
-    discord::DiscordIntegration, telegram::TelegramIntegration, terminal::TerminalIntegration,
+    discord::DiscordController, discord::DiscordNotifier, telegram::TelegramIntegration,
+    terminal::TerminalIntegration,
 };
 
 /// A struct that contains all implemented notifiers.
@@ -54,8 +55,8 @@ pub trait Notifier: Send + Sync {
 /// A controller is responsible for receiving messages from a channel and mutating the application
 /// state accordingly.
 #[async_trait]
-pub trait Controller: Send + Sync {
-    async fn start(&self, app_context: AppCtx) -> ();
+pub trait Controller: Send {
+    async fn start(self: Box<Self>, app_context: AppCtx) -> ();
 }
 
 // ==== Recieving messages ====
